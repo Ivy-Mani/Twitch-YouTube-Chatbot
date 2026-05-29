@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Use persistent directory that won't be deleted
+# Use temp directory that persists across sessions but not across videos
 PERSIST_DIR = os.path.join(tempfile.gettempdir(), "yt_insight_chroma_db")
 os.makedirs(PERSIST_DIR, exist_ok=True)
 
@@ -19,7 +19,8 @@ embedding = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L
 
 def get_collection_name(text: str) -> str:
     """Create unique collection name based on content."""
-    return f"collection_{hashlib.md5(text[:500].encode()).hexdigest()}"
+    # Use hash of first 500 chars as unique identifier for this video
+    return f"coll_{hashlib.md5(text[:500].encode()).hexdigest()}"
 
 def buildvectorstore(text: str, collection_name: str):
     splitter = RecursiveCharacterTextSplitter(
@@ -36,20 +37,22 @@ def buildvectorstore(text: str, collection_name: str):
     return vectorstore
 
 def retrieve(text: str, question: str):
+    """Retrieve answer using RAG. Creates NEW vectorstore for each video."""
     collection_name = get_collection_name(text)
     
-    if os.path.exists(PERSIST_DIR) and os.listdir(PERSIST_DIR):
-        try:
-            vectorstore = Chroma(
-                collection_name=collection_name,
-                embedding_function=embedding,
-                persist_directory=PERSIST_DIR
-            )
-            # Test if collection exists
-            vectorstore.similarity_search("test", k=1)
-        except:
-            vectorstore = buildvectorstore(text, collection_name)
-    else:
+    # Try to load existing collection for THIS video only
+    try:
+        vectorstore = Chroma(
+            collection_name=collection_name,
+            embedding_function=embedding,
+            persist_directory=PERSIST_DIR
+        )
+        # Test if collection exists by trying a search
+        test_docs = vectorstore.similarity_search("test", k=1)
+        print(f"Loaded existing collection: {collection_name}")
+    except Exception as e:
+        # Collection doesn't exist - create new one for this video
+        print(f"Creating new collection for: {collection_name}")
         vectorstore = buildvectorstore(text, collection_name)
 
     retriever = vectorstore.as_retriever(
@@ -58,30 +61,26 @@ def retrieve(text: str, question: str):
     )
 
     docs = retriever.invoke(question)
-    context = ""
-    for doc in docs:
-        context = context + doc.page_content
+    context = " ".join([doc.page_content for doc in docs])
     
     prompt = PromptTemplate(
         input_variables=["context", "question"],
         template = """You are a helpful assistant that answers questions strictly based on the provided context.
 
-        ## Instructions
-        - Answer ONLY using information from the context below
-        - If the answer isn't in the context, respond: "I don't have enough information in the provided context to answer this question."
-        - Be concise, accurate, and cite relevant parts of the context when possible
-        - If the question is partially answerable, provide what you can and note the gap
-        - Respond to greetings naturally and politely
-        - Never hallucinate or infer beyond what the context states
+## Instructions
+- Answer ONLY using information from the context below
+- If the answer isn't in the context, respond: "I don't have enough information in the provided context to answer this question."
+- Be concise, accurate, and cite relevant parts of the context when possible
+- Never hallucinate or infer beyond what the context states
 
-        ## Context
-        {context}
+## Context
+{context}
 
-        ## Question
-        {question}
+## Question
+{question}
 
-        ## Answer
-        """
+## Answer
+"""
     )
     llm = ChatGroq(model="llama-3.3-70b-versatile")
     parser = StrOutputParser()
