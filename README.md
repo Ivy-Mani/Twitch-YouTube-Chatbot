@@ -4,6 +4,8 @@
 
 YT Insight transcribes, summarizes, and lets you chat with the content of any YouTube video or local media file using Whisper, LangChain, FAISS, and Streamlit.
 
+Available in two modes — a **Streamlit web app** (`app.py`) for a polished UI, and a lightweight **CLI** (`main.py`) for quick terminal use.
+
 ---
 
 ## ✨ Features
@@ -70,7 +72,7 @@ source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Running the App
+### Option A — Streamlit Web App
 
 ```bash
 streamlit run app.py
@@ -78,13 +80,39 @@ streamlit run app.py
 
 The app will open at `http://localhost:8501`.
 
+### Option B — Command-Line Interface (CLI)
+
+For a quick, no-browser experience, use `main.py` directly in your terminal:
+
+```bash
+python main.py
+```
+
+```
+Enter the YouTube link: https://www.youtube.com/watch?v=...
+
+📝 <Generated Title>
+
+   <Generated Summary>
+
+ENTER YOUR DESIRED QUESTION ?. PRESS EXIT TO END CONVERSATION.
+
+Enter your question: What is the main topic?
+→ ...answer grounded in the transcript...
+
+Enter your question: exit
+```
+
+The CLI runs the same core pipeline — download → transcribe → summarize — then drops you into an interactive Q&A loop. Type `exit` at any time to quit.
+
 ---
 
 ## 📁 Project Structure
 
 ```
 yt-insight/
-├── app.py                  # Main Streamlit application
+├── app.py                  # Streamlit web application
+├── main.py                 # CLI entry point (terminal-based Q&A)
 ├── core/
 │   ├── rag_engine.py       # FAISS retrieval & LangChain RAG pipeline
 │   ├── summary.py          # Summary and title generation
@@ -146,11 +174,20 @@ OPENAI_API_KEY=sk-...
 
 ## 🧩 How It Works
 
-1. **Input** — You provide a YouTube URL or upload a local media file.
+Both `app.py` and `main.py` share the same core pipeline:
+
+1. **Input** — A YouTube URL is provided (CLI prompts for it; the web app accepts URL or file upload).
 2. **Audio extraction** — `yt-dlp` downloads the audio stream; `pydub` splits it into manageable chunks.
 3. **Transcription** — Each chunk is transcribed by Whisper and stitched into a full transcript.
 4. **Summarization** — An LLM generates a concise summary and a descriptive title.
-5. **Q&A (RAG)** — On your first question, the transcript is embedded and indexed with FAISS. Subsequent questions retrieve the most relevant passages before the LLM answers — keeping responses grounded in the actual content.
+5. **Q&A (RAG)** — The transcript is embedded and indexed with FAISS. Questions retrieve the most relevant passages before the LLM answers, keeping responses grounded in the actual content.
+
+| Feature | `app.py` (Streamlit) | `main.py` (CLI) |
+|---|---|---|
+| Interface | Web browser | Terminal |
+| File upload | ✅ | ❌ (URL only) |
+| RAG indexing | On first question | On first question |
+| Chat history | ✅ Persistent in session | ✅ Loop until `exit` |
 
 ---
 
