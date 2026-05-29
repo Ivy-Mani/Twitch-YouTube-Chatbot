@@ -12,8 +12,4 @@ python-dotenv
 yt-dlp
 pydub
 groq
-imageio-ffmpeg
 openai-whisper
-torch
-torchaudio
-ffmpeg-python
